@@ -1,35 +1,46 @@
-PYTHON  := .venv/bin/python3
-MAIN    := main.py
+IMAGE   := coffre-fort
+IMAGE_VERSION   := 1.0.0
 ENC     ?= secrets.yml.enc
 SRC     ?= secrets.yml
 PORT    ?= 9371
 
-.PHONY: install encrypt decrypt serve keychain-store help
+SHELL   := /bin/bash
 
-## install: create venv and install dependencies
-install: $(PYTHON)
+.PHONY: build encrypt decrypt serve keychain-store help
+
+## build: build the Docker image
+build:
+	docker build -t $(IMAGE):$(IMAGE_VERSION) .
 
 ## encrypt: encrypt SRC into ENC  (make encrypt SRC=secrets.yml ENC=secrets.yml.enc)
-encrypt: $(PYTHON)
-	$(PYTHON) $(MAIN) encrypt $(SRC) $(ENC)
+encrypt: build
+	@COFFRE_FORT_PASSWORD="$$(security find-generic-password -s coffre-fort -a coffre-fort -w)" \
+	docker run --rm \
+	  --user "$$(id -u):$$(id -g)" \
+	  -e COFFRE_FORT_PASSWORD \
+	  -v "$$(pwd):/data" \
+	  $(IMAGE) encrypt /data/$(SRC) /data/$(ENC)
 
 ## decrypt: decrypt ENC to stdout  (make decrypt ENC=secrets.yml.enc)
-decrypt: $(PYTHON)
-	$(PYTHON) $(MAIN) decrypt $(ENC)
+decrypt: build
+	@COFFRE_FORT_PASSWORD="$$(security find-generic-password -s coffre-fort -a coffre-fort -w)" \
+	docker run --rm \
+	  -e COFFRE_FORT_PASSWORD \
+	  -v "$$(pwd):/data" \
+	  $(IMAGE) decrypt /data/$(ENC) /data/$(SRC)
 
-## keychain-store: save password in Keychain with Touch ID protection (one-time setup)
-keychain-store: $(PYTHON)
-	$(PYTHON) $(MAIN) keychain-store
+## serve: decrypt via Keychain, then start with Docker Compose  (make serve ENC=secrets.yml.enc PORT=9371)
+serve: build
+	@COFFRE_FORT_PASSWORD="$$(security find-generic-password -s coffre-fort -a coffre-fort -w)" \
+	PORT=$(PORT) ENC=$(ENC) docker compose up coffre-fort
 
-## serve: start local HTTP API  (make serve ENC=secrets.yml.enc PORT=9371)
-serve: $(PYTHON)
-	$(PYTHON) $(MAIN) serve $(ENC) $(PORT)
+## keychain-store: save master password in Keychain (one-time setup)
+keychain-store:
+	@read -s -p "Master password: " pw && echo && \
+	  security delete-generic-password -s coffre-fort -a coffre-fort 2>/dev/null; \
+	  security add-generic-password -s coffre-fort -a coffre-fort -w "$$pw" && \
+	  echo "Password stored in Keychain."
 
 ## help: show usage
-help: $(PYTHON)
-	@$(PYTHON) $(MAIN)
-
-# Auto-create venv when requirements.txt changes
-$(PYTHON): requirements.txt
-	python3 -m venv .venv
-	.venv/bin/pip install -q -r requirements.txt
+help: build
+	@docker run --rm --entrypoint python3 $(IMAGE) main.py

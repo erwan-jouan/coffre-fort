@@ -1,7 +1,7 @@
 import sys
 
 from .api import cmd_serve
-from .files import cmd_decrypt, cmd_encrypt, cmd_keychain_store
+from .files import cmd_decrypt, cmd_encrypt
 
 
 def usage():
@@ -15,17 +15,17 @@ def usage():
     print(
         """\
 Usage:
-  coffre-fort encrypt        <plaintext> <output>   encrypt a plaintext file (Touch ID)
-  coffre-fort decrypt        <encrypted-file>        decrypt to stdout (Touch ID)
-  coffre-fort serve          <encrypted-file> [port] run local HTTP API (default port 9371)
-  coffre-fort keychain-store                         save password in Keychain (Touch ID)
+  coffre-fort encrypt  <plaintext> <output>          encrypt a plaintext file
+  coffre-fort decrypt  <encrypted-file>              decrypt to stdout
+  coffre-fort serve    <encrypted-file> [port]       run local HTTP API (default port 9371)
+
+Requires COFFRE_FORT_PASSWORD environment variable.
 
 Examples:
-  coffre-fort keychain-store                         # one-time setup
-  coffre-fort encrypt        secrets.yml secrets.yml.enc
-  coffre-fort decrypt        secrets.yml.enc
-  coffre-fort serve          secrets.yml.enc
-  coffre-fort serve          secrets.yml.enc 8080
+  coffre-fort encrypt  secrets.yml secrets.yml.enc
+  coffre-fort decrypt  secrets.yml.enc
+  coffre-fort serve    secrets.yml.enc
+  coffre-fort serve    secrets.yml.enc 8080
 """,
         file=sys.stderr,
     )
@@ -57,15 +57,10 @@ def main():
                 sys.exit(1)
             cmd_encrypt(args[1], args[2])
         elif cmd == "decrypt":
-            if len(args) != 2:
-                print("usage: coffre-fort decrypt <file>", file=sys.stderr)
+            if len(args) != 3:
+                print("usage: coffre-fort decrypt <src> <dst>", file=sys.stderr)
                 sys.exit(1)
-            cmd_decrypt(args[1])
-        elif cmd == "keychain-store":
-            if len(args) != 1:
-                print("usage: coffre-fort keychain-store", file=sys.stderr)
-                sys.exit(1)
-            cmd_keychain_store()
+            cmd_decrypt(args[1], args[2])
         elif cmd == "serve":
             if len(args) < 2 or len(args) > 3:
                 print("usage: coffre-fort serve <file> [port]", file=sys.stderr)

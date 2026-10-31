@@ -10,7 +10,7 @@ import yaml
 
 from .clipboard import copy_to_clipboard
 from .crypto import decrypt, encrypt
-from .keychain import get_password
+from .password import get_password
 
 _PUBLIC = os.path.join(os.path.dirname(__file__), "public")
 
@@ -19,10 +19,11 @@ _MIME = {
     ".js":   "application/javascript",
     ".json": "application/json",
     ".css":  "text/css",
+    ".svg":  "image/svg+xml",
 }
 
 
-def get_secret(data: dict, category: str, name: str, prop: str):
+def get_secret(data: dict, category: str, name: str, prop: str, copy: bool = False):
     """
     Look up a single property inside the secrets dictionary.
 
@@ -35,6 +36,7 @@ def get_secret(data: dict, category: str, name: str, prop: str):
         category: The top-level group name (e.g. "extra", "work").
         name:     The value of the "name" field inside an entry (e.g. "GitHub").
         prop:     The property you want (e.g. "password", "login", "url").
+        copy:     If True, copy the retrieved value to the system clipboard.
 
     Returns:
         The value stored at that property (usually a string).
@@ -50,7 +52,10 @@ def get_secret(data: dict, category: str, name: str, prop: str):
         raise KeyError(f"name not found: {name}")
     if prop not in item:
         raise KeyError(f"property not found: {prop}")
-    return item[prop]
+    value = item[prop]
+    if copy:
+        copy_to_clipboard(str(value))
+    return value
 
 
 def _backup(enc_file: str) -> None:
@@ -105,24 +110,20 @@ def cmd_serve(enc_file: str, port: int) -> None:
     plaintext = decrypt(raw, pw)
     state = {"secrets": yaml.safe_load(plaintext), "yaml_raw": plaintext.decode("utf-8")}
 
+    host = os.environ.get("COFFRE_FORT_HOST", "127.0.0.1")
+    strict_host = (host == "127.0.0.1")
+
     _localhost_hosts = {
         f"127.0.0.1:{port}", f"localhost:{port}", "127.0.0.1", "localhost"
     }
 
     def _is_local_origin(origin: str) -> bool:
         p = urlparse(origin)
-        return p.scheme == "http" and p.hostname in ("127.0.0.1", "localhost")
+        return p.scheme == "http" and p.hostname in ("127.0.0.1", "localhost", "0.0.0.0")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
-            """
-            Silence the default request logging that Python's HTTP server prints.
-
-            By default, BaseHTTPRequestHandler prints a line to the terminal for
-            every request (e.g. "127.0.0.1 - GET /api/yaml 200").  Overriding
-            this method with 'pass' (do nothing) keeps the terminal clean.
-            """
-            pass
+            print(fmt % args, flush=True)
 
         def _cors(self):
             """
@@ -208,10 +209,15 @@ def cmd_serve(enc_file: str, port: int) -> None:
             trick your browser into talking to our server via a technique called
             DNS rebinding.
 
+            When COFFRE_FORT_HOST is set to 0.0.0.0 (Docker mode), the check is
+            skipped because the service is protected by the Docker network instead.
+
             Returns:
                 True if the Host header is acceptable, False if the request was
                 already rejected with a 403 Forbidden response.
             """
+            if not strict_host:
+                return True
             if self.headers.get("Host", "") not in _localhost_hosts:
                 self._json(403, {"error": "forbidden: non-local host"})
                 return False
@@ -257,6 +263,8 @@ def cmd_serve(enc_file: str, port: int) -> None:
 
             if path in ("/", "/index.html"):
                 self._static("index.html")
+            elif path == "/favicon.svg":
+                self._static("favicon.svg")
             elif path.startswith("/js/"):
                 self._static(path)
             elif path == "/api/secrets":
@@ -292,7 +300,7 @@ def cmd_serve(enc_file: str, port: int) -> None:
                     self._json(400, {"error": "missing category, name, or property parameter"})
                     return
                 try:
-                    copy_to_clipboard(str(get_secret(state["secrets"], category, name, prop)))
+                    get_secret(state["secrets"], category, name, prop, copy=True)
                     self._json(200, {"ok": True})
                 except KeyError as e:
                     self._json(404, {"error": str(e)})
@@ -350,6 +358,6 @@ def cmd_serve(enc_file: str, port: int) -> None:
             else:
                 self._json(404, {"error": "not found"})
 
-    url = f"http://127.0.0.1:{port}"
-    print(f"serving editor on {url}", file=sys.stderr)
-    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    display_host = "127.0.0.1" if host == "0.0.0.0" else host
+    print(f"serving editor on http://{display_host}:{port}", file=sys.stderr)
+    HTTPServer((host, port), Handler).serve_forever()

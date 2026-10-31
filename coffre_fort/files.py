@@ -1,8 +1,8 @@
 import os
 import sys
 
-from .crypto import decrypt, encrypt, read_password
-from .keychain import get_password, store_password
+from .crypto import decrypt, encrypt
+from .password import get_password
 
 
 def cmd_encrypt(src: str, dst: str) -> None:
@@ -29,7 +29,7 @@ def cmd_encrypt(src: str, dst: str) -> None:
     print(f"encrypted → {dst}", file=sys.stderr)
 
 
-def cmd_decrypt(src: str) -> None:
+def cmd_decrypt(src: str, dst: str) -> None:
     """
     Decrypt an encrypted file and print its contents to the terminal.
 
@@ -45,17 +45,7 @@ def cmd_decrypt(src: str) -> None:
         data = f.read()
     pw = get_password()
     plaintext = decrypt(data, pw)
-    sys.stdout.buffer.write(plaintext)
-
-
-
-def cmd_keychain_store() -> None:
-    """Save the encryption password in the macOS Keychain with Touch ID protection.
-
-    Run this once to register the password.  Every subsequent 'decrypt' will
-    read from the Keychain and require a fingerprint scan instead of a typed
-    password.
-    """
-    pw = read_password("Password to store in Keychain: ")
-    store_password(pw)
-    print("password stored in Keychain with Touch ID protection", file=sys.stderr)
+    fd = os.open(dst, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(plaintext)
+    #sys.stdout.buffer.write(plaintext)

@@ -1,0 +1,8 @@
+.venv/
+bak/
+secrets.yml
+secrets.yml.enc
+*.pyc
+__pycache__/
+.git/
+.env

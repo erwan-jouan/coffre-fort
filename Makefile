@@ -1,5 +1,5 @@
 IMAGE   := coffre-fort
-IMAGE_VERSION   := 1.0.1
+IMAGE_VERSION   := 1.0.2
 ENC     ?= secrets.yml.enc
 SRC     ?= secrets.yml
 PORT    ?= 9371

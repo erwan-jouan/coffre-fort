@@ -1,0 +1,10 @@
+services:
+  coffre-fort:
+    image: rone56/coffre-fort
+    environment:
+      - COFFRE_FORT_PASSWORD
+    volumes:
+      - .:/data
+    ports:
+      - "${PORT:-9371}:9371"
+    command: serve /data/${ENC:-secrets.yml.enc}

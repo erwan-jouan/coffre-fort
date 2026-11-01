@@ -7,12 +7,12 @@ them through a local browser-based editor.
 
 `coffre-fort` encrypts a YAML file containing passwords and credentials using
 AES-256-GCM with an Argon2id-derived key. The encrypted file is safe to commit
-to version control or store in the cloud. Secrets are only decrypted in memory —
-nothing is ever written back to disk in plaintext.
+to version control or store in the cloud.
 
-On macOS, every operation is gated behind **Touch ID**: the master password is
-stored in the macOS Keychain and is only released after a successful fingerprint
-scan.
+The master password is read from the `COFFRE_FORT_PASSWORD` environment
+variable. On macOS, `make keychain-store` saves the password in the system
+Keychain once; all Make targets then retrieve it automatically via
+`security find-generic-password`.
 
 ## Encryption
 
@@ -26,32 +26,46 @@ attempting decryption.
 ## Setup
 
 ```bash
-make install          # create .venv and install dependencies
 make keychain-store   # one-time: save the master password in the macOS Keychain
 ```
 
-After `keychain-store`, every subsequent command will prompt for Touch ID instead
-of asking you to type the password.
+After `keychain-store`, every Make target retrieves the password from the
+Keychain automatically — no need to type it again.
 
 ## Commands
 
 | Command | What it does |
 |---------|-------------|
 | `make encrypt` | Encrypt `secrets.yml` → `secrets.yml.enc` |
-| `make decrypt` | Decrypt `secrets.yml.enc` to stdout |
+| `make decrypt` | Decrypt `secrets.yml.enc` → `secrets.yml` |
 | `make serve`   | Start the web editor on http://127.0.0.1:9371 |
 
 Override defaults with Make variables:
 
 ```bash
 make encrypt SRC=other.yml ENC=other.yml.enc
+make decrypt ENC=other.yml.enc SRC=other.yml
 make serve PORT=8080
 ```
 
-Run directly without Make:
+Run directly without Make (requires `COFFRE_FORT_PASSWORD` to be set):
 
 ```bash
 .venv/bin/python3 main.py <command> [args]
+```
+
+## Docker
+
+The pre-built image is published on Docker Hub as
+[`rone56/coffre-fort`](https://hub.docker.com/r/rone56/coffre-fort).
+No local build is required — all Make targets pull it automatically.
+
+A `docker-compose.yml` is provided for `make serve`. It mounts the current
+directory as `/data` and forwards the configured port:
+
+```bash
+make serve           # uses docker compose under the hood
+make serve PORT=8080
 ```
 
 ## Web editor (`make serve`)
@@ -108,7 +122,7 @@ list of entries. Each entry has at minimum a `name` field.
 ```
 coffre_fort/
     crypto.py    — AES-256-GCM + Argon2id encryption primitives
-    keychain.py  — Touch ID gate (Swift/LAContext) + Keychain read/write
+    password.py  — reads COFFRE_FORT_PASSWORD from the environment
     clipboard.py — OS-specific clipboard copy
     files.py     — cmd_encrypt, cmd_decrypt
     api.py       — HTTP server, web editor backend
@@ -119,4 +133,5 @@ coffre_fort/
         js/api.js    — fetch helpers (loadYaml / saveYaml)
         schema.json  — JSON schema for the secrets structure
 main.py              — thin entry point
+docker-compose.yml   — service definition for make serve
 ```
